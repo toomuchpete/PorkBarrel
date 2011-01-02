@@ -1,5 +1,6 @@
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.logging.*;
 
@@ -7,7 +8,7 @@ public class PorkBarrel extends Plugin
 {
 	// Base Plugin Variables
 	private static String name = "PorkBarrel";
-	private static int version = 2;
+	private static int version = 3;
 	private boolean debug = false;
 	static final Logger log = Logger.getLogger("Minecraft");
 	
@@ -22,6 +23,11 @@ public class PorkBarrel extends Plugin
 	private String postAuthGroupName = "member";
 	private String authPassword = "xyzzy";
 	private ArrayList<String> validPasswordList = new ArrayList<String>();
+	
+	// Repair
+	private boolean likeRepairsLike = true;
+	private HashMap<Integer,Integer> repairingItems = new HashMap<Integer,Integer>();
+	ArrayList<Integer> repairables = new ArrayList<Integer>();
 	
 	// SetGroup config
 	private ArrayList<String> sgGroupList = new ArrayList<String>();
@@ -47,17 +53,84 @@ public class PorkBarrel extends Plugin
 		postAuthGroupName = properties.getString("post-auth-group", postAuthGroupName);
 		authPassword      = properties.getString("auth-password", authPassword);
 		
+		// Repair
+		likeRepairsLike = properties.getBoolean("like-repairs-like", likeRepairsLike);
+		String repairTemp = properties.getString("repairing-items", "322:1025");
+		
+		// Parse repair list
+		String[] itemList = repairTemp.split(",");
+		for (int i = 0; i < itemList.length; i++) {
+			String[] itemDetails = itemList[i].split(":");
+			
+			if (itemDetails.length == 2) {
+				try {
+					int itemId = Integer.parseInt(itemDetails[0]);
+					int repVal = Integer.parseInt(itemDetails[1]);
+					repairingItems.put(itemId, repVal);
+				} catch (Exception e) {
+					log.info("Error parsing repairing item: " + itemList[i]);
+				}
+			}
+		}
+		
+		// Repairable Items:
+		
+			// Wooden Tools (Durability: 33)
+			repairables.add(268); // Sword
+			repairables.add(269); // Shovel
+			repairables.add(270); // Pick
+			repairables.add(271); // Axe
+			repairables.add(290); // Hoe
+	
+			// Golden Tools (Durability: 33)
+			repairables.add(283); // Sword
+			repairables.add(284); // Shovel
+			repairables.add(285); // Pick
+			repairables.add(286); // Axe
+			repairables.add(294); // Hoe
+	
+			// Rock Tools (Durability: 65)
+			repairables.add(272); // Sword
+			repairables.add(273); // Shovel
+			repairables.add(274); // Pick
+			repairables.add(275); // Axe
+			repairables.add(291); // Hoe
+			
+			// Iron Tools (Durability: 129)
+			repairables.add(267); // Sword
+			repairables.add(256); // Shovel
+			repairables.add(257); // Pick
+			repairables.add(258); // Axe
+			repairables.add(292); // Hoe
+	
+			// Diamond Tools (Durability: 1025)
+			repairables.add(276); // Sword
+			repairables.add(277); // Shovel
+			repairables.add(278); // Pick
+			repairables.add(279); // Axe
+			repairables.add(293); // Hoe
+		
 		// SetGroup
 		Collections.addAll(sgGroupList, properties.getString("setgroup-list", "default,vip").split(","));
 		
 		
 		// TODO: Add command help
-		// etc.getInstance().addCommand("/lb", " - LogBlock display command.");
+		
+		etc.getInstance().addCommand("/authme", " - Get authorized to build.");
+		etc.getInstance().addCommand("/setgroup", " playername groupname - Put a player in a group.");
+		etc.getInstance().addCommand("/grouplist", " - List of groups available for /setgroup.");
+		etc.getInstance().addCommand("/danger", " - Display the status of monster spawning.");
+		etc.getInstance().addCommand("/repair", " - Repair a tool in slot 1 with item in slot 2.");
 		log.info(name + " v" + version + " enabled.");
 	}
 
 	public void disable() {
-		// etc.getInstance().removeCommand("/lb");
+		etc.getInstance().removeCommand("/authme");
+		etc.getInstance().removeCommand("/setgroup");
+		etc.getInstance().removeCommand("/grouplist");
+		etc.getInstance().removeCommand("/danger");
+		etc.getInstance().removeCommand("/repair");
+		
 		log.info(name + " v" + version + " disabled.");
 	}
 
@@ -84,7 +157,7 @@ public class PorkBarrel extends Plugin
 		return(msg.replaceAll("\\!\\@([0-9a-f])", "§$1"));
 	}
 
-	String join(String[] s, String glue) {
+	public String join(String[] s, String glue) {
 		int k=s.length;
 		if (k==0) {
 			return null;
@@ -190,6 +263,10 @@ public class PorkBarrel extends Plugin
 			// The plug-in will get any command issued in the game,
 			// not just the ones we specifically request, so we have to
 			// check to see if we should be acting.
+	    	
+	    	if (!player.canUseCommand(split[0])) {
+	    		return false;
+	    	}
 	    	
 			if (split[0].equalsIgnoreCase("/gift")){
 				// Feature: Server Gifts
@@ -401,6 +478,141 @@ public class PorkBarrel extends Plugin
 					serverProps = null;
 				}
 				
+				return true;
+			} else if (split[0].equalsIgnoreCase("/repair")) {
+				// Empty slot
+				if (player.getInventory().getItemFromSlot(0) == null || player.getInventory().getItemFromSlot(1) == null) {
+					player.sendMessage(Colors.Rose + "Repairable tool goes in slot one, repairing item goes in slot two.");
+					return true;
+				}
+				
+				// Get the info from the two slots
+				Item toRepair = player.getInventory().getItemFromSlot(0);
+				int toRepairId = toRepair.getItemId();
+				
+				Item repairWith = player.getInventory().getItemFromSlot(1);
+				int repairWithId = repairWith.getItemId();
+				
+				// Check against the items that can be repaired
+				if (!repairables.contains(toRepairId)) {
+					player.sendMessage(Colors.Rose + "Your " + etc.getDataSource().getItem(toRepairId) + " is not repairable.");
+					return true;
+				}
+				
+				// Does the item actually need to be repaired?
+				if (toRepair.getDamage() == 0) {
+					player.sendMessage(Colors.Rose + "Your " + etc.getDataSource().getItem(toRepairId) + " does not need repairing.");
+					return true;
+				}
+				
+				// "like repairs like" means one of what the item was built of is enough to fully repair a tool
+				// For example: one diamond fully repairs a diamond pick
+				if (likeRepairsLike) {
+					boolean doRepair = false;
+					
+					switch(toRepairId) {
+						// Wooden Tools (Durability: 33)
+						case 268: // Sword
+						case 269: // Shovel
+						case 270: // Pick
+						case 271: // Axe
+						case 290: // Hoe
+							if (repairWithId == 5) { doRepair = true; }
+							break;
+	
+							// Golden Tools (Durability: 33)
+						case 283: // Sword
+						case 284: // Shovel
+						case 285: // Pick
+						case 286: // Axe
+						case 294: // Hoe
+							if (repairWithId == 266) { doRepair = true; }
+							break;
+				
+						// Rock Tools (Durability: 65)
+						case 272: // Sword
+						case 273: // Shovel
+						case 274: // Pick
+						case 275: // Axe
+						case 291: // Hoe
+							if (repairWithId == 4) { doRepair = true; }
+							break;
+						
+						// Iron Tools (Durability: 129)
+						case 267: // Sword
+						case 256: // Shovel
+						case 257: // Pick
+						case 258: // Axe
+						case 292: // Hoe
+							if (repairWithId == 265) { doRepair = true; }
+							break;
+				
+						// Diamond Tools (Durability: 1025)
+						case 276: // Sword
+						case 277: // Shovel
+						case 278: // Pick
+						case 279: // Axe
+						case 293: // Hoe
+							if (repairWithId == 264) { doRepair = true; }
+							break;
+					}
+					
+					if (doRepair) {
+						// Place the tool in inventory
+						player.getInventory().setSlot(toRepairId, 1, 0, 0);
+						
+						// Update the item being repaired with
+						if (repairWith.getAmount() > 1) {
+							repairWith.setAmount(repairWith.getAmount()-1);
+							player.getInventory().setSlot(repairWith, 1);
+						} else {
+							player.getInventory().removeItem(1);
+						}
+						
+						player.sendMessage(Colors.LightGreen + "Your " + etc.getDataSource().getItem(toRepairId) + " is as good as new!");
+						return true;
+					}
+				}
+				
+				// Check that the item in the repair-with slot is okay to repair with
+				if (!repairingItems.containsKey(repairWithId)) {
+					player.sendMessage(Colors.Rose + "You cannot repair tools with " + etc.getDataSource().getItem(repairWithId) + ".");
+					return true;
+				}
+
+				int curDamage = toRepair.getDamage();
+				int repairPerItem = repairingItems.get(repairWithId);
+				int repairItemQty = repairWith.getAmount();
+				int repairNumber = 1;
+
+				// "/repair max" will use as many items from slot1 as is required to fully-repair an item
+				if (split.length == 2 && split[1].equalsIgnoreCase("max")) {
+					int requestedQty = curDamage / repairPerItem;
+					
+					// Integer division above discards remainders
+					if (curDamage % repairPerItem != 0) { requestedQty++; }
+					
+					// Don't allow more than slot1 to be used.
+					repairNumber = Math.min(repairItemQty, requestedQty);
+				}
+				
+				// Repair the tool
+				if (curDamage < (repairPerItem * repairNumber)) {
+					curDamage = 0;
+					player.sendMessage(Colors.LightGreen + "Your " + etc.getDataSource().getItem(toRepairId) + " is as good as new!");
+				} else {
+					curDamage = toRepair.getDamage() - (repairPerItem * repairNumber);
+					player.sendMessage(Colors.LightGreen + "Your " + etc.getDataSource().getItem(toRepairId) + " has been patched up.");
+				}
+				player.getInventory().setSlot(toRepairId, 1, curDamage, 0);
+				
+				// Update slot1
+				if (repairWith.getAmount() > repairNumber) {
+					repairWith.setAmount(repairWith.getAmount() - repairNumber);
+					player.getInventory().setSlot(repairWith, 1);
+				} else {
+					player.getInventory().removeItem(1);
+				}
 				return true;
 			}
 	    	return false;
