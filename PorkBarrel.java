@@ -8,7 +8,7 @@ public class PorkBarrel extends Plugin
 {
 	// Base Plugin Variables
 	private static String name = "PorkBarrel";
-	private static int version = 3;
+	private static String version = "3.01";
 	private boolean debug = false;
 	static final Logger log = Logger.getLogger("Minecraft");
 	
@@ -27,6 +27,8 @@ public class PorkBarrel extends Plugin
 	// Repair
 	private boolean likeRepairsLike = true;
 	private HashMap<Integer,Integer> repairingItems = new HashMap<Integer,Integer>();
+	private int lighterRepairPerCharge = 0;
+	private boolean allowArmorRepair = true;
 	ArrayList<Integer> repairables = new ArrayList<Integer>();
 	
 	// SetGroup config
@@ -55,12 +57,15 @@ public class PorkBarrel extends Plugin
 		
 		// Repair
 		likeRepairsLike = properties.getBoolean("like-repairs-like", likeRepairsLike);
-		String repairTemp = properties.getString("repairing-items", "322:1025");
+		lighterRepairPerCharge = properties.getInt("lighter-repair-per-charge", lighterRepairPerCharge);
+		allowArmorRepair = properties.getBoolean("allow-armor-repair", allowArmorRepair);
+		String repairTemp = properties.getString("repairing-items", "322*1025");
+		
 		
 		// Parse repair list
 		String[] itemList = repairTemp.split(",");
 		for (int i = 0; i < itemList.length; i++) {
-			String[] itemDetails = itemList[i].split(":");
+			String[] itemDetails = itemList[i].split("\\*");
 			
 			if (itemDetails.length == 2) {
 				try {
@@ -81,13 +86,30 @@ public class PorkBarrel extends Plugin
 			repairables.add(270); // Pick
 			repairables.add(271); // Axe
 			repairables.add(290); // Hoe
-	
+
+			// Leather Armor
+			repairables.add(298); // Helmet
+			repairables.add(299); // Chestplate
+			repairables.add(300); // Leggings
+			repairables.add(301); // Boots
+
+			// Chainmail Armor
+			repairables.add(302); // Helmet
+			repairables.add(303); // Chestplate
+			repairables.add(304); // Leggings
+			repairables.add(305); // Boots
+			
+			
 			// Golden Tools (Durability: 33)
 			repairables.add(283); // Sword
 			repairables.add(284); // Shovel
 			repairables.add(285); // Pick
 			repairables.add(286); // Axe
 			repairables.add(294); // Hoe
+			repairables.add(314); // Helmet
+			repairables.add(315); // Chestplate
+			repairables.add(316); // Leggings
+			repairables.add(317); // Boots
 	
 			// Rock Tools (Durability: 65)
 			repairables.add(272); // Sword
@@ -102,6 +124,11 @@ public class PorkBarrel extends Plugin
 			repairables.add(257); // Pick
 			repairables.add(258); // Axe
 			repairables.add(292); // Hoe
+			repairables.add(306); // Helmet
+			repairables.add(307); // Chestplate
+			repairables.add(308); // Leggings
+			repairables.add(309); // Boots
+			
 	
 			// Diamond Tools (Durability: 1025)
 			repairables.add(276); // Sword
@@ -109,6 +136,11 @@ public class PorkBarrel extends Plugin
 			repairables.add(278); // Pick
 			repairables.add(279); // Axe
 			repairables.add(293); // Hoe
+			repairables.add(310); // Helmet
+			repairables.add(311); // Chestplate
+			repairables.add(312); // Leggings
+			repairables.add(313); // Boots
+			
 		
 		// SetGroup
 		Collections.addAll(sgGroupList, properties.getString("setgroup-list", "default,vip").split(","));
@@ -121,6 +153,7 @@ public class PorkBarrel extends Plugin
 		etc.getInstance().addCommand("/grouplist", " - List of groups available for /setgroup.");
 		etc.getInstance().addCommand("/danger", " - Display the status of monster spawning.");
 		etc.getInstance().addCommand("/repair", " - Repair a tool in slot 1 with item in slot 2.");
+		etc.getInstance().addCommand("/whatrepairs", " - Tells you what materials repair tools or armor.");
 		log.info(name + " v" + version + " enabled.");
 	}
 
@@ -130,6 +163,7 @@ public class PorkBarrel extends Plugin
 		etc.getInstance().removeCommand("/grouplist");
 		etc.getInstance().removeCommand("/danger");
 		etc.getInstance().removeCommand("/repair");
+		etc.getInstance().removeCommand("/whatrepairs");
 		
 		log.info(name + " v" + version + " disabled.");
 	}
@@ -526,6 +560,11 @@ public class PorkBarrel extends Plugin
 						case 285: // Pick
 						case 286: // Axe
 						case 294: // Hoe
+						case 314: // Helmet
+						case 315: // Chestplate
+						case 316: // Leggings
+						case 317: // Boots
+							
 							if (repairWithId == 266) { doRepair = true; }
 							break;
 				
@@ -538,12 +577,30 @@ public class PorkBarrel extends Plugin
 							if (repairWithId == 4) { doRepair = true; }
 							break;
 						
+						// Leather Armor
+						case 298: // Helmet
+						case 299: // Chestplate
+						case 300: // Leggings
+						case 301: // Boots
+						case 302: // Chain Helmet
+						case 303: // Chain Chestplate
+						case 304: // Chain Leggings
+						case 305: // Chain Boots
+							if (repairWithId == 334) { doRepair = true; }
+							break;
+
+							
 						// Iron Tools (Durability: 129)
 						case 267: // Sword
 						case 256: // Shovel
 						case 257: // Pick
 						case 258: // Axe
 						case 292: // Hoe
+						case 306: // Helmet
+						case 307: // Chestplate
+						case 308: // Leggings
+						case 309: // Boots
+
 							if (repairWithId == 265) { doRepair = true; }
 							break;
 				
@@ -553,6 +610,10 @@ public class PorkBarrel extends Plugin
 						case 278: // Pick
 						case 279: // Axe
 						case 293: // Hoe
+						case 310: // Helmet
+						case 311: // Chestplate
+						case 312: // Leggings
+						case 313: // Boots
 							if (repairWithId == 264) { doRepair = true; }
 							break;
 					}
@@ -574,16 +635,29 @@ public class PorkBarrel extends Plugin
 					}
 				}
 				
+				boolean doLighterRepair = false;
+				if (lighterRepairPerCharge > 0 && repairWithId == 259) {
+					doLighterRepair = true;
+				}
+				
+				
 				// Check that the item in the repair-with slot is okay to repair with
-				if (!repairingItems.containsKey(repairWithId)) {
+				if (!doLighterRepair && !repairingItems.containsKey(repairWithId)) {
 					player.sendMessage(Colors.Rose + "You cannot repair tools with " + etc.getDataSource().getItem(repairWithId) + ".");
 					return true;
 				}
 
 				int curDamage = toRepair.getDamage();
-				int repairPerItem = repairingItems.get(repairWithId);
+				int repairPerItem = 0;
 				int repairItemQty = repairWith.getAmount();
 				int repairNumber = 1;
+				
+				if (doLighterRepair) {
+					repairPerItem = lighterRepairPerCharge;
+					repairItemQty = 65 - repairWith.getDamage();
+				} else {
+					repairPerItem = repairingItems.get(repairWithId);
+				}
 
 				// "/repair max" will use as many items from slot1 as is required to fully-repair an item
 				if (split.length == 2 && split[1].equalsIgnoreCase("max")) {
@@ -607,14 +681,39 @@ public class PorkBarrel extends Plugin
 				player.getInventory().setSlot(toRepairId, 1, curDamage, 0);
 				
 				// Update slot1
-				if (repairWith.getAmount() > repairNumber) {
+				if (doLighterRepair && (repairWith.getDamage() + repairNumber < 65)) {
+					player.getInventory().setSlot(259, 1, repairWith.getDamage() + repairNumber, 1);
+				} else if (repairWith.getAmount() > repairNumber) {
 					repairWith.setAmount(repairWith.getAmount() - repairNumber);
 					player.getInventory().setSlot(repairWith, 1);
 				} else {
 					player.getInventory().removeItem(1);
 				}
 				return true;
+			} else if (split[0].equalsIgnoreCase("/whatrepairs")) {
+				if (allowArmorRepair) {
+					player.sendMessage(Colors.LightBlue + "Tools and armor may both be repaired.");
+				} else {
+					player.sendMessage(Colors.LightBlue + "Only tools may be repaired.");
+				}
+				
+				if (likeRepairsLike) {
+					player.sendMessage(Colors.LightGray + "One of an item's material will fully repair it.");
+				}
+				
+				if (lighterRepairPerCharge > 0) {
+					player.sendMessage(Colors.LightGray + "One charge of a flint & steel repairs items for " + lighterRepairPerCharge + " durability.");
+				}
+				
+				if (repairingItems.size() > 0) {
+					player.sendMessage(Colors.LightGray + "The following items will also perform repairs:");
+					for (int id : repairingItems.keySet()) {
+						player.sendMessage(Colors.LightGray + " - " + etc.getDataSource().getItem(id) + ": " + repairingItems.get(id));
+					}
+				}
+				return true;
 			}
+			
 	    	return false;
 	    } //onCommand
 	    
