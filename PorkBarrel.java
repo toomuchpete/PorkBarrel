@@ -2,15 +2,20 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Random;
 import java.util.logging.*;
 
 public class PorkBarrel extends Plugin 
 {
 	// Base Plugin Variables
 	private static String name = "PorkBarrel";
-	private static String version = "3.01";
+	private static String version = "3.14";
 	private boolean debug = false;
 	static final Logger log = Logger.getLogger("Minecraft");
+	private Random randGen;
+	
+	// Painting
+	private int[][] paintReactions = new int[16][16];
 	
 	// Gifter config
 	private int giftId  = 0;
@@ -140,6 +145,47 @@ public class PorkBarrel extends Plugin
 			repairables.add(311); // Chestplate
 			repairables.add(312); // Leggings
 			repairables.add(313); // Boots
+		
+		// Painting 
+		for (int dInc = 0; dInc < 16; dInc++) {
+			for (int wInc = 0; wInc < 16; wInc++) {
+				if (dInc == 0) {
+					// Black dye makes things black by default
+					paintReactions[dInc][wInc] = 15;
+				} else if (dInc == 15) {
+					// White dye makes things white by default
+					paintReactions[dInc][wInc] = 0;
+				} else if (wInc == 0) {
+					// Dye + white wool = that colored wool
+					paintReactions[dInc][wInc] = 15 - dInc;
+				} else {
+					paintReactions[dInc][wInc] = -1;
+				}
+			}
+		}
+		// paintMap[dyeColor][woolColor]
+			// White Dye + ____
+			paintReactions[15][7] = 8;  // gray  = light gray
+			paintReactions[15][11] = 3; // blue  = light blue
+			paintReactions[15][13] = 5; // green = light green
+			paintReactions[15][14] = 6; // red   = pink
+			paintReactions[15][15] = 7; // gray  = light gray
+			
+			paintReactions[11][14] = 1; // Yellow dye + red wool = orange
+			paintReactions[9][10] = 2;  // Pink dye + purple wool = magenta
+			paintReactions[5][6] = 2;   // Purple dye + pink wool = magenta
+			paintReactions[4][13] = 9;  // Blue dye + green wool = cyan
+			paintReactions[4][14] = 10; // Blue dye + red wool = purple
+			paintReactions[2][11] = 9;  // Green dye + blue wool = cyan
+			paintReactions[1][4] = 1;   // Red dye + yellow wool = orange
+			paintReactions[1][11] = 10; // Red dye + blue wool = purple
+			
+			// Black Dye + ____
+			paintReactions[0][2] = 10;  // magenta = purple
+			paintReactions[0][3] = 11;  // light blue = blue
+			paintReactions[0][5] = 13;  // light green = green
+			paintReactions[0][6] = 14;  // pink = red
+			paintReactions[0][8] = 7;   // light gray = gray
 			
 		
 		// SetGroup
@@ -170,6 +216,7 @@ public class PorkBarrel extends Plugin
 
 	public void initialize() {
 		PBListener listener = new PBListener();
+		randGen = new Random();
 		
 		etc.getLoader().addListener(PluginLoader.Hook.IGNITE, listener, this, PluginListener.Priority.HIGH);
 		etc.getLoader().addListener(PluginLoader.Hook.ITEM_USE, listener, this, PluginListener.Priority.HIGH);
@@ -178,6 +225,8 @@ public class PorkBarrel extends Plugin
 		etc.getLoader().addListener(PluginLoader.Hook.COMMAND, listener, this, PluginListener.Priority.HIGH);
 		etc.getLoader().addListener(PluginLoader.Hook.SERVERCOMMAND, listener, this, PluginListener.Priority.HIGH);
 		etc.getLoader().addListener(PluginLoader.Hook.LOGIN, listener, this, PluginListener.Priority.LOW);
+		etc.getLoader().addListener(PluginLoader.Hook.BLOCK_RIGHTCLICKED, listener, this, PluginListener.Priority.LOW);
+		etc.getLoader().addListener(PluginLoader.Hook.BLOCK_BROKEN, listener, this, PluginListener.Priority.MEDIUM);
 	}
 	
 	public void debug(String msg) {
@@ -224,6 +273,9 @@ public class PorkBarrel extends Plugin
 	    	if (block.getStatus() == 2 && !player.canUseCommand("/startfire")) {
 	    		debug(player.getName() + " was prevented from using fire.");
 	    		player.sendMessage(Colors.Rose + "You are not permitted to light fires.");
+	    		return true;
+	    	} else if (block.getStatus() == 1 || block.getStatus() == 3) {
+	    		// Blocking all fire spreading
 	    		return true;
 	    	}
 	        return false;
@@ -282,6 +334,115 @@ public class PorkBarrel extends Plugin
 	    		debug("Blocking " + mob.getName() + " from spawning on leaves.");
 	    		return true;
 	    	}
+	        return false;
+	    }
+
+	    /**
+	     * Called when someone presses right click aimed at a block.
+	     * You can intercept this to add your own right click actions
+	     * to different item types (see itemInHand)
+	     * 
+	     * @param player
+	     * @param blockClicked
+	     * @param itemInHand
+	     */
+	    public void onBlockRightClicked(Player player, Block blockClicked, Item item) {
+	    	if (item.getItemId() == 286 && player.canUseCommand("/removeanyblock") && blockClicked.getType() != 54) {
+	    		etc.getServer().setBlockAt(0, blockClicked.getX(), blockClicked.getY(), blockClicked.getZ());
+	    	}
+	    	
+	    	if (player.canUseCommand("/paint") && item.getItemId() == 351 && blockClicked.getType() == 35) {
+	    		int dyeColor = item.getDamage();
+	    		int woolColor = etc.getServer().getBlockData(blockClicked.getX(), blockClicked.getY(), blockClicked.getZ()); 
+	    		int targetColor = paintReactions[dyeColor][woolColor];
+	    		
+	    		if (targetColor >= 0 && targetColor != woolColor) {
+	    			if (removeOneDye(player, dyeColor)) {
+	    				etc.getServer().setBlockData(blockClicked.getX(), blockClicked.getY(), blockClicked.getZ(), targetColor);	
+	    			}
+	    		}
+	    	}
+	    }
+	    
+	    private boolean removeOneDye(Player player, int dyeType) {
+	    	Item thisItem;
+	    	int targetSlot = -1;
+	    	boolean isFull = true;
+	    	for (int slotNum=35; slotNum >= 0; slotNum--) {
+	    		thisItem = player.getInventory().getItemFromSlot(slotNum);
+	    		
+	    		if (thisItem == null) {
+	    			continue;
+	    		}
+	    		
+	    		if (thisItem.getItemId() == 351 && thisItem.getDamage() == dyeType) {
+	    			if (thisItem.getAmount() < 64) {
+	    				targetSlot = slotNum;
+	    				isFull = false;
+	    			} else if (isFull) {
+	    				targetSlot = slotNum;
+	    			}
+	    		}
+	    	}
+	    	
+	    	thisItem = player.getInventory().getItemFromSlot(targetSlot);
+	    	if (thisItem != null) {
+	    		int newQuantity = thisItem.getAmount() - 1;
+	    		
+	    		if (newQuantity == 0) {
+	    			player.getInventory().removeItem(targetSlot);
+	    		} else {
+	    			player.getInventory().setSlot(351, newQuantity, dyeType, targetSlot);
+	    		}
+	    		
+	    		return true;
+	    	}
+	    	return false;
+	    }
+
+	    /**
+	     * Called when a person actually breaks the block.
+	     * 
+	     * @param player
+	     * @param block
+	     * @return
+	     */
+	    public boolean onBlockBreak(Player player, Block block) {
+	    	// Simulate fossil finds and lapis infusion
+	    	if (player.getItemInHand() == 278) {
+	    		if (block.getType() == 1) {
+		    		int r = randGen.nextInt(63);
+		    		if (r == 0) {
+		    			etc.getServer().dropItem(block.getX(), block.getY(), block.getZ(), 352);	
+		    		}
+	    		} else if (block.getType() == 16) { // Coal
+	    			int r = randGen.nextInt(63);
+	    			if (r == 0) {
+	    				etc.getServer().dropItem(block.getX(), block.getY(), block.getZ(), 21);
+	    			}
+	    		} else if (block.getType() == 73 || block.getType() == 74) { // Redstone
+	    			int r = randGen.nextInt(31);
+	    			if (r == 0) {
+	    				etc.getServer().dropItem(block.getX(), block.getY(), block.getZ(), 21);
+	    			}
+	    		} else if (block.getType() == 56) { // Diamond
+	    			int r = randGen.nextInt(31);
+	    			if (r == 0) {
+	    				etc.getServer().dropItem(block.getX(), block.getY(), block.getZ(), 21);
+	    			}
+	    		} else if (block.getType() == 21) { // Lapis Lazuli
+	    			int r = randGen.nextInt(15);
+	    			if (r == 0) {
+	    				etc.getServer().dropItem(block.getX(), block.getY(), block.getZ(), 21);
+	    			}
+	    			
+	    		}
+	    	}
+	    	
+	    	// Glass should drop sand
+    		if (block.getType() == 20) {
+    			etc.getServer().dropItem(block.getX(), block.getY(), block.getZ(), 12);	
+    		}	    	
 	        return false;
 	    }
 	    
@@ -502,7 +663,7 @@ public class PorkBarrel extends Plugin
 					} else {
 						player.sendMessage(Colors.LightGreen + "The world feels safe.");
 					}
-				} catch (Exception e) {
+				} catch (Throwable e) {
 					PropertiesFile serverProps = new PropertiesFile("server.properties");
 					if (serverProps.getBoolean("spawn-monsters", true)) {
 						player.sendMessage(Colors.Rose + "You're not sure, but the world seems dangerous.");
@@ -712,6 +873,20 @@ public class PorkBarrel extends Plugin
 					}
 				}
 				return true;
+			} else if (split[0].equalsIgnoreCase("/givedye")) {
+				if (split.length > 1) {
+					int dyeColor = Integer.parseInt(split[1]);
+					int quantity = 1;
+					if (dyeColor > 15) { return false; }
+					
+					if (split.length > 2) {
+						quantity = Integer.parseInt(split[2]);
+					}
+					if (quantity > 64) { return false; }
+					
+					player.getInventory().setSlot(351, quantity, dyeColor, player.getInventory().getEmptySlot());
+					return true;
+				}
 			}
 			
 	    	return false;
